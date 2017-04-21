@@ -23,7 +23,9 @@ namespace Settings {
 	static const char *ias_crt = "";					//IAS certificate used when registering developer account at Intel
 	static string ias_url = "https://test-as.sgx.trustedservices.intel.com:443/attestation/sgx/v1/";	//REST API IAS
 
-	static string nginx_client_crts = "./nginx_crt.crt";	//File to store certificates for client authentication performed by nginx
+	// CA certificate and key used when signing certificates for the application.
+	static std::string ca_crt_path = "";
+	static std::string ca_key_path = "";
 }
 
 #endif

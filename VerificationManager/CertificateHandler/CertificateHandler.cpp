@@ -9,6 +9,15 @@
 #include "UtilityFunctions.h"
 #include "../GeneralSettings.h"
 
+#define RSA_KEY_BITS (4096)
+
+#define REQ_DN_C "SE"
+#define REQ_DN_ST ""
+#define REQ_DN_L ""
+#define REQ_DN_O "Example Company"
+#define REQ_DN_OU ""
+#define REQ_DN_CN "VNF Application"
+
 using namespace util;
 using namespace std;
 
@@ -27,180 +36,218 @@ CertificateHandler* CertificateHandler::getInstance() {
 }
 
 
-bool CertificateHandler::write_to_disk(char *x509) {
-    Log("Storing certificate on controller side");
+namespace {
 
-    ofstream outfile;
-    outfile.open(Settings::nginx_client_crts, std::ofstream::out | std::ofstream::app);
-    outfile << x509;
+void crt_to_pem(X509 *crt, uint8_t **crt_bytes, size_t *crt_size)
+{
+	/* Convert signed certificate to PEM format. */
+	BIO *bio = BIO_new(BIO_s_mem());
+	PEM_write_bio_X509(bio, crt);
+	*crt_size = BIO_pending(bio);
+	*crt_bytes = (uint8_t *)malloc(*crt_size + 1);
+	BIO_read(bio, *crt_bytes, *crt_size);
+	BIO_free_all(bio);
+}
 
-    outfile.close();
+int generate_key_csr(EVP_PKEY **key, X509_REQ **req)
+{
+    RSA *rsa = NULL;
+    X509_NAME *name = NULL;
 
-    return true;
+	*key = EVP_PKEY_new();
+	if (!*key) goto err;
+	*req = X509_REQ_new();
+	if (!*req) goto err;
+
+	rsa = RSA_generate_key(RSA_KEY_BITS, RSA_F4, NULL, NULL);
+	if (!EVP_PKEY_assign_RSA(*key, rsa)) goto err;
+
+	X509_REQ_set_pubkey(*req, *key);
+
+	/* Set the DN of the request. */
+	name = X509_REQ_get_subject_name(*req);
+	X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC, (const unsigned char*)REQ_DN_C, -1, -1, 0);
+	X509_NAME_add_entry_by_txt(name, "ST", MBSTRING_ASC, (const unsigned char*)REQ_DN_ST, -1, -1, 0);
+	X509_NAME_add_entry_by_txt(name, "L", MBSTRING_ASC, (const unsigned char*)REQ_DN_L, -1, -1, 0);
+	X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (const unsigned char*)REQ_DN_O, -1, -1, 0);
+	X509_NAME_add_entry_by_txt(name, "OU", MBSTRING_ASC, (const unsigned char*)REQ_DN_OU, -1, -1, 0);
+	X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (const unsigned char*)REQ_DN_CN, -1, -1, 0);
+
+	/* Self-sign the request to prove that we posses the key. */
+	if (!X509_REQ_sign(*req, *key, EVP_sha256())) goto err;
+	return 1;
+err:
+	EVP_PKEY_free(*key);
+	X509_REQ_free(*req);
+	return 0;
+}
+
+int generate_set_random_serial(X509 *crt)
+{
+	/* Generates a 20 byte random serial number and sets in certificate. */
+	unsigned char serial_bytes[20];
+	if (RAND_bytes(serial_bytes, sizeof(serial_bytes)) != 1) return 0;
+	serial_bytes[0] &= 0x7f; /* Ensure positive serial! */
+	BIGNUM *bn = BN_new();
+	BN_bin2bn(serial_bytes, sizeof(serial_bytes), bn);
+	ASN1_INTEGER *serial = ASN1_INTEGER_new();
+	BN_to_ASN1_INTEGER(bn, serial);
+
+	X509_set_serialNumber(crt, serial); // Set serial.
+
+	ASN1_INTEGER_free(serial);
+	BN_free(bn);
+	return 1;
+}
+
+int generate_signed_key_pair(EVP_PKEY *ca_key, X509 *ca_crt, EVP_PKEY **key, X509 **crt)
+{
+    EVP_PKEY *req_pubkey = NULL;
+
+	/* Generate the private key and corresponding CSR. */
+	X509_REQ *req = NULL;
+	if (!generate_key_csr(key, &req)) {
+		Log("Failed to generate key and/or CSR!");
+		return 0;
+	}
+
+	/* Sign with the CA. */
+	*crt = X509_new();
+	if (!*crt) goto err;
+
+	X509_set_version(*crt, 2); /* Set version to X509v3 */
+
+	/* Generate random 20 byte serial. */
+	if (!generate_set_random_serial(*crt)) goto err;
+
+	/* Set issuer to CA's subject. */
+	X509_set_issuer_name(*crt, X509_get_subject_name(ca_crt));
+
+	/* Set validity of certificate to 2 years. */
+	X509_gmtime_adj(X509_get_notBefore(*crt), 0);
+	X509_gmtime_adj(X509_get_notAfter(*crt), (long)2*365*3600);
+
+	/* Get the request's subject and just use it (we don't bother checking it since we generated
+	 * it ourself). Also take the request's public key. */
+	X509_set_subject_name(*crt, X509_REQ_get_subject_name(req));
+	req_pubkey = X509_REQ_get_pubkey(req);
+	X509_set_pubkey(*crt, req_pubkey);
+	EVP_PKEY_free(req_pubkey);
+
+	/* Now perform the actual signing with the CA. */
+	if (X509_sign(*crt, ca_key, EVP_sha256()) == 0) goto err;
+
+	X509_REQ_free(req);
+	return 1;
+err:
+	EVP_PKEY_free(*key);
+	X509_REQ_free(req);
+	X509_free(*crt);
+	return 0;
 }
 
 
-int CertificateHandler::add_ext(X509 *cert, int nid, char *value) {
-    X509_EXTENSION *ex;
-    X509V3_CTX ctx;
-
-    /* This sets the 'context' of the extensions. */
-    /* No configuration database */
-    X509V3_set_ctx_nodb(&ctx);
-
-    /* Issuer and subject certs: both the target since it is self signed,
-     * no request and no CRL
-     */
-    X509V3_set_ctx(&ctx, cert, cert, NULL, NULL, 0);
-    ex = X509V3_EXT_conf_nid(NULL, &ctx, nid, value);
-
-    if (!ex)
-        return 1;
-
-    X509_add_ext(cert,ex,-1);
-    X509_EXTENSION_free(ex);
-
-    return 0;
+void key_to_pem(EVP_PKEY *key, uint8_t **key_bytes, size_t *key_size)
+{
+	/* Convert private key to PEM format. */
+	BIO *bio = BIO_new(BIO_s_mem());
+	PEM_write_bio_PrivateKey(bio, key, NULL, NULL, 0, NULL, NULL);
+	*key_size = BIO_pending(bio);
+	*key_bytes = (uint8_t *)malloc(*key_size + 1);
+	BIO_read(bio, *key_bytes, *key_size);
+	BIO_free_all(bio);
 }
 
+int load_ca(const char *ca_key_path, EVP_PKEY **ca_key, const char *ca_crt_path, X509 **ca_crt)
+{
+	BIO *bio = NULL;
+	*ca_crt = NULL;
+	*ca_key = NULL;
 
-int CertificateHandler::mkcert(X509 **x509p, EVP_PKEY **pkeyp, int bits, int serial, int days) {
-    X509 *x;
-    EVP_PKEY *pk;
-    RSA *rsa;
-    X509_NAME *name=NULL;
+	/* Load CA public key. */
+	bio = BIO_new(BIO_s_file());
+	if (!BIO_read_filename(bio, ca_crt_path)) goto err;
+	*ca_crt = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+	if (!*ca_crt) goto err;
+	BIO_free_all(bio);
 
-    if ((pkeyp == NULL) || (*pkeyp == NULL)) {
-        if ((pk=EVP_PKEY_new()) == NULL) {
-            abort();
-            return 1;
-        }
-    } else
-        pk= *pkeyp;
+	/* Load CA private key. */
+	bio = BIO_new(BIO_s_file());
+	if (!BIO_read_filename(bio, ca_key_path)) goto err;
+	*ca_key = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
+	if (!ca_key) goto err;
+	BIO_free_all(bio);
+	return 1;
+err:
+	BIO_free_all(bio);
+	X509_free(*ca_crt);
+	EVP_PKEY_free(*ca_key);
+	return 0;
+}
 
-    if ((x509p == NULL) || (*x509p == NULL)) {
-        if ((x = X509_new()) == NULL)
-            return 1;
-    } else
-        x = *x509p;
-
-    rsa = RSA_generate_key(bits, RSA_F4, NULL, NULL);
-
-    if (!EVP_PKEY_assign_RSA(pk,rsa)) {
-        abort();
-        return 1;
-    }
-
-    rsa = NULL;
-
-    X509_set_version(x, 2);
-    ASN1_INTEGER_set(X509_get_serialNumber(x),serial);
-    X509_gmtime_adj(X509_get_notBefore(x),0);
-    X509_gmtime_adj(X509_get_notAfter(x),(long)60*60*24*days);
-    X509_set_pubkey(x,pk);
-
-    name = X509_get_subject_name(x);
-
-    X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC, (const unsigned char*)"US", -1, -1, 0);
-    X509_NAME_add_entry_by_txt(name, "ST", MBSTRING_ASC, (const unsigned char*)"Oregon", -1, -1, 0);
-    X509_NAME_add_entry_by_txt(name, "L", MBSTRING_ASC, (const unsigned char*)"Portland", -1, -1, 0);
-    X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (const unsigned char*)"Company Name", -1, -1, 0);
-    X509_NAME_add_entry_by_txt(name, "OU", MBSTRING_ASC, (const unsigned char*)"Org", -1, -1, 0);
-    X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (const unsigned char*)"www.example.com", -1, -1, 0);
-
-    X509_set_issuer_name(x, name);
-
-    /* Add various extensions: standard extensions */
-//	add_ext(x, NID_basic_constraints, const_cast<char*>("critical,CA:TRUE"));
-//	add_ext(x, NID_key_usage, const_cast<char*>("critical,keyCertSign,cRLSign"));
-//	add_ext(x, NID_subject_key_identifier, const_cast<char*>("hash"));
-
-    if (!X509_sign(x, pk, EVP_sha256()))
-        return 1;
-
-    *x509p = x;
-    *pkeyp = pk;
-
-    return 0;
 }
 
 
 int CertificateHandler::generateKeyPair(uint8_t **evp_pkey, int *pkey_size, uint8_t **x509_crt, int *x509_size) {
-    Log("Generating key pair and certificate");
+	/* Load CA key and cert. */
+	EVP_PKEY *ca_key = NULL;
+	X509 *ca_crt = NULL;
+	if (!load_ca(Settings::ca_key_path.c_str(), &ca_key, Settings::ca_crt_path.c_str(), &ca_crt)) {
+		Log("Failed to load CA certificate and/or key!");
+		return 1;
+	}
 
-    BIO *bio_err;
-    X509 *x509 = NULL;
-    EVP_PKEY *pkey = NULL;
+	/* Generate CA-signed keypair. */
+	EVP_PKEY *key = NULL;
+	X509 *crt = NULL;
 
-    CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_ON);
+	int ret = generate_signed_key_pair(ca_key, ca_crt, &key, &crt);
+	if (!ret) {
+		Log("Failed to generate key pair!");
+		return 1;
+	}
 
-    int error = mkcert(&x509, &pkey, 4096, 0, 365);
+	/* Convert key and certificate to PEM format. */
+	uint8_t *key_bytes = NULL;
+	uint8_t *crt_bytes = NULL;
+	size_t key_size = 0;
+	size_t crt_size = 0;
 
-    if (error)
-        return error;
+	key_to_pem(key, &key_bytes, &key_size);
+	crt_to_pem(crt, &crt_bytes, &crt_size);
 
-    //extract the PKEY
-    BIO *bio = BIO_new(BIO_s_mem());
-    PEM_write_bio_PrivateKey(bio, pkey, NULL, NULL, 0, NULL, NULL);
+    /* Replace \n with \r\n to make it work with mbedtls. */
+    std::string tmp;
+    std::stringstream ss2;
 
-    int pem_pkey_size = BIO_pending(bio);
-    char *pem_pkey = (char*) calloc((pem_pkey_size)+1, 1); /* Null-terminate */
-    BIO_read(bio, pem_pkey, pem_pkey_size);
-
-    BIO_free_all(bio);
-    //============================
-
-    //extract the X509
-    bio = BIO_new(BIO_s_mem());
-    PEM_write_bio_X509(bio, x509);
-
-    int pem_x509_size = BIO_pending(bio);
-    char *pem_x509 = (char*) calloc((pem_x509_size)+1, 1);
-    BIO_read(bio, pem_x509, pem_x509_size);
-
-    BIO_free_all(bio);
-    //============================
-
-    X509_free(x509);
-    EVP_PKEY_free(pkey);
-    CRYPTO_cleanup_all_ex_data();
-    CRYPTO_mem_leaks(bio_err);
-    BIO_free(bio_err);
-
-    this->write_to_disk(pem_x509);
-
-    //Modify the generated pkey otherwise the mbed-function later can't parse this stuff
-    //===========================================================================
-    string tmp;
-    stringstream ss2;
-
-    stringstream ss_pkey(pem_pkey);
-    while (getline(ss_pkey, tmp, '\n')) {
+    std::stringstream ss_pkey((char*)key_bytes);
+    while (std::getline(ss_pkey, tmp, '\n')) {
         ss2 << tmp << "\r\n";
     }
 
-    string pkey_str = ss2.str();
+    std::string pkey_str = ss2.str();
 
     ss2.str(string());
-    stringstream ss_x509(pem_x509);
+    std::stringstream ss_x509((char*)crt_bytes);
 
-    while (getline(ss_x509, tmp, '\n')) {
+    while (std::getline(ss_x509, tmp, '\n')) {
         ss2 << tmp << "\r\n";
     }
 
-    string x509_str = ss2.str();
-
+    std::string x509_str = ss2.str();
 
     *pkey_size = StringToByteArray(pkey_str, evp_pkey);
     *x509_size = StringToByteArray(x509_str, x509_crt);
 
+	/* Free stuff. */
+	EVP_PKEY_free(ca_key);
+	EVP_PKEY_free(key);
+	X509_free(ca_crt);
+	X509_free(crt);
+	free(key_bytes);
+	free(crt_bytes);
+
     return 0;
 }
 
-
-
-
-
-
-
-
+/* vim: set ai expandtab ts=4 sw=4: */

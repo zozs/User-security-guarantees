@@ -19,9 +19,6 @@ public:
 
 private:
     CertificateHandler();
-    bool write_to_disk(char *x509);
-    int mkcert(X509 **x509p, EVP_PKEY **pkeyp, int bits, int serial, int days);
-    int add_ext(X509 *cert, int nid, char *value);
 
 private:
     static CertificateHandler *instance;

@@ -1,0 +1,8 @@
+*.o
+Application/app
+Certs/
+RemoteHost/app
+isv_enclave.signed.so
+isv_enclave.so
+VerificationManager/app
+libservice_provider.so
