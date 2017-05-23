@@ -50,6 +50,7 @@ bool verify_enclave_properties(sgx_quote_t *p_quote)
         return true;
     } else {
         Log("Actual MRENCLAVE hash is not in the list of allowed hashes!", log::error);
+	return false;
     }
 }
 
