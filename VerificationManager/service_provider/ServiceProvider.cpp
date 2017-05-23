@@ -1,3 +1,8 @@
+#include <algorithm>
+#include <fstream>
+#include <iterator>
+#include <set>
+
 #include "ServiceProvider.h"
 #include "sample_libcrypto.h"
 #include "../GeneralSettings.h"
@@ -13,6 +18,42 @@ static const sample_ec256_private_t g_sp_priv_key = {
         0xad, 0x57, 0x34, 0x53, 0xd1, 0x03, 0x8c, 0x01
     }
 };
+
+namespace {
+
+std::vector<std::string> read_file_lines_to_vector(const std::string& filename)
+{
+    std::vector<std::string> lines;
+    std::ifstream file(filename);
+    if (!file) {
+        Log("Failed to open MRENCLAVE file with expected measurements.");
+        return lines;
+    }
+    std::copy(std::istream_iterator<std::string>(file),
+        std::istream_iterator<std::string>(),
+        std::back_inserter(lines));
+    return lines;
+}
+
+bool verify_enclave_properties(sgx_quote_t *p_quote)
+{
+    /*
+     * Read the file with allowed MRENCLAVE values.
+     * One hex-encoded, allowed, value per line.
+     * Then ensure that the attested MRENCLAVE value matches one of the values
+     * from the file.
+     */
+    std::vector<std::string> lines = read_file_lines_to_vector(Settings::valid_mrenclaves);
+    std::string actual = ByteArrayToString(p_quote->report_body.mr_enclave.m, SGX_HASH_SIZE);
+    if (std::find(lines.begin(), lines.end(), actual) != lines.end()) {
+        Log("Found actual MRENCLAVE value in list of expected MRENCLAVE hashes.");
+        return true;
+    } else {
+        Log("Actual MRENCLAVE hash is not in the list of allowed hashes!", log::error);
+    }
+}
+
+}
 
 ServiceProvider::ServiceProvider(WebService *ws) : ws(ws) {}
 
@@ -468,7 +509,7 @@ int ServiceProvider::sp_ra_proc_msg3_req(Messages::MessageMSG3 msg, Messages::At
 
         p_att_result_msg = (sample_ra_att_result_msg_t *)p_att_result_msg_full->body;
 
-        bool isv_policy_passed = true;
+        bool isv_policy_passed = verify_enclave_properties(p_quote);
 
         p_att_result_msg->platform_info_blob = attestation_report.info_blob;
 

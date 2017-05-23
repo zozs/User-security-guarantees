@@ -3,7 +3,7 @@
 
 #include <string>
 
-using namespace std;
+using std::string;
 
 namespace Settings {
 	static int rh_port = 22222;							//remote host port
@@ -12,6 +12,7 @@ namespace Settings {
 	static string container_host = "localhost";			//container-application IP
 	
 	static string measurement_list = "";				//Path to the measurement list
+	static string valid_mrenclaves = "";				// Path to file with list of valid MRENCLAVE values.
 	static string remotehostHashKeyLocation = "";		//Docker data volume path on the remote host
 	static string applicationHashKeyLocation = "";		//Docker data volume path on the container
 	

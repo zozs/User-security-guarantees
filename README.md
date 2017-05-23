@@ -58,6 +58,7 @@ Before running the programs, the ```GeneralSettings.h``` must be modified:
 - ```container_port```: Container port on which the server is running
 - ```container_host```: Container IP on which the server is running
 - ```measurement_list```: Path to the measurement list
+- ```valid_mrenclaves```: Path to file with list of valid MRENCLAVE values.
 - ```remotehostHashKeyLocation```: Docker data volume path on the remote host
 - ```applicationHashKeyLocation```: Docker data volume path on the container
 - ```nginx_pub_crt```: Public certificate path for nginx
@@ -66,7 +67,8 @@ Before running the programs, the ```GeneralSettings.h``` must be modified:
 - ```spid```: SPID provided by Intel when registering developer account
 - ```ias_crt```: IAS certificate used when registering developer account
 - ```ias_url```: REST API IAS
-- ```nginx_client_crts```: File to store certificates for client authentication performed by nginx
+- ```ca_crt_path```: CA certificate for the CA key below.
+- ```ca_key_path```: CA private key used when signing application certificates.
 
 
 
@@ -83,5 +85,4 @@ To compile all 3 programs execute:
 The created programs ```app``` are then located in the folders _VerificationManager_, _RemoteHost_ and _Application_, and can simply be run with
 
 ```./app```
-
 
