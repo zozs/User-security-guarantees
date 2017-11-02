@@ -879,8 +879,6 @@ int ServiceProvider::sp_ra_proc_app_hmac(Messages::SecretMessage sec_msg, uint8_
 
 int ServiceProvider::sp_ra_app_hmac_resp(Messages::SecretMessage *new_msg,
         bool match,
-        uint8_t *evp_key,
-        int evp_key_size,
         uint8_t *x509_crt,
         int x509_crt_size) {
     memset(validation_result, '\0', MAX_VERIFICATION_RESULT);
@@ -897,19 +895,12 @@ int ServiceProvider::sp_ra_app_hmac_resp(Messages::SecretMessage *new_msg,
     int ret = 0;
     ret = this->encryptMessage(validation_result, MAX_VERIFICATION_RESULT, encrypted, gcm_mac);
 
-    uint8_t *enc_evpKey, *enc_x509;
-    uint8_t evpKey_gcm_mac[16];
+    uint8_t *enc_x509;
     uint8_t x509_gcm_mac[16];
 
     if ((SGX_SUCCESS == ret) && match) {
-        enc_evpKey = (uint8_t*) malloc(sizeof(uint8_t) * evp_key_size);
         enc_x509 = (uint8_t*) malloc(sizeof(uint8_t) * x509_crt_size);
-
-        if (evp_key_size > 0)
-            ret = this->encryptMessage(evp_key, evp_key_size, enc_evpKey, evpKey_gcm_mac);
-
-        if (!ret)
-            ret = this->encryptMessage(x509_crt, x509_crt_size, enc_x509, x509_gcm_mac);
+        ret = this->encryptMessage(x509_crt, x509_crt_size, enc_x509, x509_gcm_mac);
     }
 
 
@@ -926,15 +917,6 @@ int ServiceProvider::sp_ra_app_hmac_resp(Messages::SecretMessage *new_msg,
 
         if (match) {
             Log("Encrypt keys");
-            new_msg->set_encryped_pkey_size(evp_key_size);
-            new_msg->set_encryped_x509_size(x509_crt_size);
-
-            for (int i=0; i<evp_key_size; i++)
-                new_msg->add_encrypted_pkey(enc_evpKey[i]);
-
-            for (int i=0; i<16; i++)
-                new_msg->add_encrypted_pkey_mac_smk(evpKey_gcm_mac[i]);
-
 
             for (int i=0; i<x509_crt_size; i++)
                 new_msg->add_encrypted_x509(enc_x509[i]);
@@ -942,7 +924,6 @@ int ServiceProvider::sp_ra_app_hmac_resp(Messages::SecretMessage *new_msg,
             for (int i=0; i<16; i++)
                 new_msg->add_encrypted_x509_mac_smk(x509_gcm_mac[i]);
 
-            free(enc_evpKey);
             free(enc_x509);
         }
     }

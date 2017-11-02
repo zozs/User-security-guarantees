@@ -6,3 +6,7 @@ isv_enclave.signed.so
 isv_enclave.so
 VerificationManager/app
 libservice_provider.so
+isv_enclave_t.c
+isv_enclave_t.h
+isv_enclave_u.c
+isv_enclave_u.h

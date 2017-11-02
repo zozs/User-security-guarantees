@@ -180,15 +180,11 @@ void protobuf_AssignDesc_Messages_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(AttestationMessage));
   SecretMessage_descriptor_ = file->message_type(6);
-  static const int SecretMessage_offsets_[10] = {
+  static const int SecretMessage_offsets_[6] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SecretMessage, type_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SecretMessage, size_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SecretMessage, encryped_pkey_size_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SecretMessage, encryped_x509_size_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SecretMessage, encrypted_content_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SecretMessage, mac_smk_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SecretMessage, encrypted_pkey_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SecretMessage, encrypted_pkey_mac_smk_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SecretMessage, encrypted_x509_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(SecretMessage, encrypted_x509_mac_smk_),
   };
@@ -283,14 +279,11 @@ void protobuf_AddDesc_Messages_2eproto() {
     "\030\n \003(\rB\002\020\001\022\030\n\014ec_sign256_y\030\013 \003(\rB\002\020\001\022\023\n\007"
     "mac_smk\030\014 \003(\rB\002\020\001\022\023\n\013result_size\030\r \001(\r\022\024"
     "\n\010reserved\030\016 \003(\rB\002\020\001\022\027\n\013payload_tag\030\017 \003("
-    "\rB\002\020\001\022\023\n\007payload\030\020 \003(\rB\002\020\001\"\227\002\n\rSecretMes"
-    "sage\022\014\n\004type\030\001 \002(\r\022\014\n\004size\030\002 \002(\r\022\032\n\022encr"
-    "yped_pkey_size\030\003 \001(\r\022\032\n\022encryped_x509_si"
-    "ze\030\004 \001(\r\022\035\n\021encrypted_content\030\005 \003(\rB\002\020\001\022"
-    "\023\n\007mac_smk\030\006 \003(\rB\002\020\001\022\032\n\016encrypted_pkey\030\007"
-    " \003(\rB\002\020\001\022\"\n\026encrypted_pkey_mac_smk\030\010 \003(\r"
+    "\rB\002\020\001\022\023\n\007payload\030\020 \003(\rB\002\020\001\"\237\001\n\rSecretMes"
+    "sage\022\014\n\004type\030\001 \002(\r\022\014\n\004size\030\002 \002(\r\022\035\n\021encr"
+    "ypted_content\030\005 \003(\rB\002\020\001\022\023\n\007mac_smk\030\006 \003(\r"
     "B\002\020\001\022\032\n\016encrypted_x509\030\t \003(\rB\002\020\001\022\"\n\026encr"
-    "ypted_x509_mac_smk\030\n \003(\rB\002\020\001", 1348);
+    "ypted_x509_mac_smk\030\n \003(\rB\002\020\001", 1228);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "Messages.proto", &protobuf_RegisterTypes);
   InitialMessage::default_instance_ = new InitialMessage();
@@ -3813,12 +3806,8 @@ void AttestationMessage::Swap(AttestationMessage* other) {
 #ifndef _MSC_VER
 const int SecretMessage::kTypeFieldNumber;
 const int SecretMessage::kSizeFieldNumber;
-const int SecretMessage::kEncrypedPkeySizeFieldNumber;
-const int SecretMessage::kEncrypedX509SizeFieldNumber;
 const int SecretMessage::kEncryptedContentFieldNumber;
 const int SecretMessage::kMacSmkFieldNumber;
-const int SecretMessage::kEncryptedPkeyFieldNumber;
-const int SecretMessage::kEncryptedPkeyMacSmkFieldNumber;
 const int SecretMessage::kEncryptedX509FieldNumber;
 const int SecretMessage::kEncryptedX509MacSmkFieldNumber;
 #endif  // !_MSC_VER
@@ -3843,8 +3832,6 @@ void SecretMessage::SharedCtor() {
   _cached_size_ = 0;
   type_ = 0u;
   size_ = 0u;
-  encryped_pkey_size_ = 0u;
-  encryped_x509_size_ = 0u;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -3890,15 +3877,13 @@ void SecretMessage::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  ZR_(type_, encryped_x509_size_);
+  ZR_(type_, size_);
 
 #undef OFFSET_OF_FIELD_
 #undef ZR_
 
   encrypted_content_.Clear();
   mac_smk_.Clear();
-  encrypted_pkey_.Clear();
-  encrypted_pkey_mac_smk_.Clear();
   encrypted_x509_.Clear();
   encrypted_x509_mac_smk_.Clear();
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -3940,36 +3925,6 @@ bool SecretMessage::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(24)) goto parse_encryped_pkey_size;
-        break;
-      }
-
-      // optional uint32 encryped_pkey_size = 3;
-      case 3: {
-        if (tag == 24) {
-         parse_encryped_pkey_size:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
-                 input, &encryped_pkey_size_)));
-          set_has_encryped_pkey_size();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(32)) goto parse_encryped_x509_size;
-        break;
-      }
-
-      // optional uint32 encryped_x509_size = 4;
-      case 4: {
-        if (tag == 32) {
-         parse_encryped_x509_size:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
-                 input, &encryped_x509_size_)));
-          set_has_encryped_x509_size();
-        } else {
-          goto handle_unusual;
-        }
         if (input->ExpectTag(42)) goto parse_encrypted_content;
         break;
       }
@@ -4003,42 +3958,6 @@ bool SecretMessage::MergePartialFromCodedStream(
           DO_((::google::protobuf::internal::WireFormatLite::ReadRepeatedPrimitiveNoInline<
                    ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
                  1, 50, input, this->mutable_mac_smk())));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(58)) goto parse_encrypted_pkey;
-        break;
-      }
-
-      // repeated uint32 encrypted_pkey = 7 [packed = true];
-      case 7: {
-        if (tag == 58) {
-         parse_encrypted_pkey:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPackedPrimitive<
-                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
-                 input, this->mutable_encrypted_pkey())));
-        } else if (tag == 56) {
-          DO_((::google::protobuf::internal::WireFormatLite::ReadRepeatedPrimitiveNoInline<
-                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
-                 1, 58, input, this->mutable_encrypted_pkey())));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(66)) goto parse_encrypted_pkey_mac_smk;
-        break;
-      }
-
-      // repeated uint32 encrypted_pkey_mac_smk = 8 [packed = true];
-      case 8: {
-        if (tag == 66) {
-         parse_encrypted_pkey_mac_smk:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPackedPrimitive<
-                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
-                 input, this->mutable_encrypted_pkey_mac_smk())));
-        } else if (tag == 64) {
-          DO_((::google::protobuf::internal::WireFormatLite::ReadRepeatedPrimitiveNoInline<
-                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
-                 1, 66, input, this->mutable_encrypted_pkey_mac_smk())));
         } else {
           goto handle_unusual;
         }
@@ -4117,16 +4036,6 @@ void SecretMessage::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteUInt32(2, this->size(), output);
   }
 
-  // optional uint32 encryped_pkey_size = 3;
-  if (has_encryped_pkey_size()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt32(3, this->encryped_pkey_size(), output);
-  }
-
-  // optional uint32 encryped_x509_size = 4;
-  if (has_encryped_x509_size()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt32(4, this->encryped_x509_size(), output);
-  }
-
   // repeated uint32 encrypted_content = 5 [packed = true];
   if (this->encrypted_content_size() > 0) {
     ::google::protobuf::internal::WireFormatLite::WriteTag(5, ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED, output);
@@ -4145,26 +4054,6 @@ void SecretMessage::SerializeWithCachedSizes(
   for (int i = 0; i < this->mac_smk_size(); i++) {
     ::google::protobuf::internal::WireFormatLite::WriteUInt32NoTag(
       this->mac_smk(i), output);
-  }
-
-  // repeated uint32 encrypted_pkey = 7 [packed = true];
-  if (this->encrypted_pkey_size() > 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteTag(7, ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED, output);
-    output->WriteVarint32(_encrypted_pkey_cached_byte_size_);
-  }
-  for (int i = 0; i < this->encrypted_pkey_size(); i++) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt32NoTag(
-      this->encrypted_pkey(i), output);
-  }
-
-  // repeated uint32 encrypted_pkey_mac_smk = 8 [packed = true];
-  if (this->encrypted_pkey_mac_smk_size() > 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteTag(8, ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED, output);
-    output->WriteVarint32(_encrypted_pkey_mac_smk_cached_byte_size_);
-  }
-  for (int i = 0; i < this->encrypted_pkey_mac_smk_size(); i++) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt32NoTag(
-      this->encrypted_pkey_mac_smk(i), output);
   }
 
   // repeated uint32 encrypted_x509 = 9 [packed = true];
@@ -4207,16 +4096,6 @@ void SecretMessage::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(2, this->size(), target);
   }
 
-  // optional uint32 encryped_pkey_size = 3;
-  if (has_encryped_pkey_size()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(3, this->encryped_pkey_size(), target);
-  }
-
-  // optional uint32 encryped_x509_size = 4;
-  if (has_encryped_x509_size()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(4, this->encryped_x509_size(), target);
-  }
-
   // repeated uint32 encrypted_content = 5 [packed = true];
   if (this->encrypted_content_size() > 0) {
     target = ::google::protobuf::internal::WireFormatLite::WriteTagToArray(
@@ -4243,34 +4122,6 @@ void SecretMessage::SerializeWithCachedSizes(
   for (int i = 0; i < this->mac_smk_size(); i++) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteUInt32NoTagToArray(this->mac_smk(i), target);
-  }
-
-  // repeated uint32 encrypted_pkey = 7 [packed = true];
-  if (this->encrypted_pkey_size() > 0) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteTagToArray(
-      7,
-      ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED,
-      target);
-    target = ::google::protobuf::io::CodedOutputStream::WriteVarint32ToArray(
-      _encrypted_pkey_cached_byte_size_, target);
-  }
-  for (int i = 0; i < this->encrypted_pkey_size(); i++) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteUInt32NoTagToArray(this->encrypted_pkey(i), target);
-  }
-
-  // repeated uint32 encrypted_pkey_mac_smk = 8 [packed = true];
-  if (this->encrypted_pkey_mac_smk_size() > 0) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteTagToArray(
-      8,
-      ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED,
-      target);
-    target = ::google::protobuf::io::CodedOutputStream::WriteVarint32ToArray(
-      _encrypted_pkey_mac_smk_cached_byte_size_, target);
-  }
-  for (int i = 0; i < this->encrypted_pkey_mac_smk_size(); i++) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteUInt32NoTagToArray(this->encrypted_pkey_mac_smk(i), target);
   }
 
   // repeated uint32 encrypted_x509 = 9 [packed = true];
@@ -4327,20 +4178,6 @@ int SecretMessage::ByteSize() const {
           this->size());
     }
 
-    // optional uint32 encryped_pkey_size = 3;
-    if (has_encryped_pkey_size()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::UInt32Size(
-          this->encryped_pkey_size());
-    }
-
-    // optional uint32 encryped_x509_size = 4;
-    if (has_encryped_x509_size()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::UInt32Size(
-          this->encryped_x509_size());
-    }
-
   }
   // repeated uint32 encrypted_content = 5 [packed = true];
   {
@@ -4372,40 +4209,6 @@ int SecretMessage::ByteSize() const {
     }
     GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
     _mac_smk_cached_byte_size_ = data_size;
-    GOOGLE_SAFE_CONCURRENT_WRITES_END();
-    total_size += data_size;
-  }
-
-  // repeated uint32 encrypted_pkey = 7 [packed = true];
-  {
-    int data_size = 0;
-    for (int i = 0; i < this->encrypted_pkey_size(); i++) {
-      data_size += ::google::protobuf::internal::WireFormatLite::
-        UInt32Size(this->encrypted_pkey(i));
-    }
-    if (data_size > 0) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int32Size(data_size);
-    }
-    GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-    _encrypted_pkey_cached_byte_size_ = data_size;
-    GOOGLE_SAFE_CONCURRENT_WRITES_END();
-    total_size += data_size;
-  }
-
-  // repeated uint32 encrypted_pkey_mac_smk = 8 [packed = true];
-  {
-    int data_size = 0;
-    for (int i = 0; i < this->encrypted_pkey_mac_smk_size(); i++) {
-      data_size += ::google::protobuf::internal::WireFormatLite::
-        UInt32Size(this->encrypted_pkey_mac_smk(i));
-    }
-    if (data_size > 0) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int32Size(data_size);
-    }
-    GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-    _encrypted_pkey_mac_smk_cached_byte_size_ = data_size;
     GOOGLE_SAFE_CONCURRENT_WRITES_END();
     total_size += data_size;
   }
@@ -4471,8 +4274,6 @@ void SecretMessage::MergeFrom(const SecretMessage& from) {
   GOOGLE_CHECK_NE(&from, this);
   encrypted_content_.MergeFrom(from.encrypted_content_);
   mac_smk_.MergeFrom(from.mac_smk_);
-  encrypted_pkey_.MergeFrom(from.encrypted_pkey_);
-  encrypted_pkey_mac_smk_.MergeFrom(from.encrypted_pkey_mac_smk_);
   encrypted_x509_.MergeFrom(from.encrypted_x509_);
   encrypted_x509_mac_smk_.MergeFrom(from.encrypted_x509_mac_smk_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
@@ -4481,12 +4282,6 @@ void SecretMessage::MergeFrom(const SecretMessage& from) {
     }
     if (from.has_size()) {
       set_size(from.size());
-    }
-    if (from.has_encryped_pkey_size()) {
-      set_encryped_pkey_size(from.encryped_pkey_size());
-    }
-    if (from.has_encryped_x509_size()) {
-      set_encryped_x509_size(from.encryped_x509_size());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -4514,12 +4309,8 @@ void SecretMessage::Swap(SecretMessage* other) {
   if (other != this) {
     std::swap(type_, other->type_);
     std::swap(size_, other->size_);
-    std::swap(encryped_pkey_size_, other->encryped_pkey_size_);
-    std::swap(encryped_x509_size_, other->encryped_x509_size_);
     encrypted_content_.Swap(&other->encrypted_content_);
     mac_smk_.Swap(&other->mac_smk_);
-    encrypted_pkey_.Swap(&other->encrypted_pkey_);
-    encrypted_pkey_mac_smk_.Swap(&other->encrypted_pkey_mac_smk_);
     encrypted_x509_.Swap(&other->encrypted_x509_);
     encrypted_x509_mac_smk_.Swap(&other->encrypted_x509_mac_smk_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);

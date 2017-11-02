@@ -72,8 +72,6 @@ public:
     int sp_ra_proc_app_hmac(Messages::SecretMessage sec_msg, uint8_t **csr, int *csr_size);
     int sp_ra_app_hmac_resp(Messages::SecretMessage *new_msg,
                             bool match,
-                            uint8_t *evp_key,
-                            int evp_key_size,
                             uint8_t *x509_crt,
                             int x509_crt_size);
 

@@ -579,18 +579,19 @@ bool generate_pkey(mbedtls_pk_context *key, mbedtls_ctr_drbg_context *ctr_drbg)
     mbedtls_pk_init(key);
 
     // Generate 2048-bit RSA keypair.
-    mbedtls_printf("\n  . Generating the private key ...");
+    print_wrapper("  . Generating the private key ...");
 
     if ((ret = mbedtls_pk_setup(key, mbedtls_pk_info_from_type(MBEDTLS_PK_RSA))) != 0) {
-        mbedtls_printf( " failed\n  !  mbedtls_pk_setup returned -0x%04x\n", -ret );
+        print_wrapper( " failed\n  !  mbedtls_pk_setup returned -0x%04x\n", -ret );
         return false;
     }
 
     ret = mbedtls_rsa_gen_key(mbedtls_pk_rsa(*key), mbedtls_ctr_drbg_random, ctr_drbg, 2048, 65537 ); // 2048 bit key.
     if (ret != 0) {
-        mbedtls_printf( " failed\n  !  mbedtls_rsa_gen_key returned -0x%04x\n", -ret );
+        print_wrapper( " failed\n  !  mbedtls_rsa_gen_key returned -0x%04x\n", -ret );
         return false;
     }
+    print_wrapper(" ok\n");
 
     return true;
 }
@@ -618,29 +619,25 @@ bool generate_csr(mbedtls_pk_context *key, uint8_t *buf, uint32_t bufsize, mbedt
     mbedtls_x509write_csr_init(&req);
     mbedtls_x509write_csr_set_md_alg(&req, MBEDTLS_MD_SHA256);
 
-    // Check the subject name for validity
-    mbedtls_printf( "  . Checking subject name..." );
-
     if( ( ret = mbedtls_x509write_csr_set_subject_name( &req, subject ) ) != 0 )
     {
-        mbedtls_printf( " failed\n  !  mbedtls_x509write_csr_set_subject_name returned %d\n", ret );
+        print_wrapper( " failed\n  !  mbedtls_x509write_csr_set_subject_name returned %d\n", ret );
         return false;
     }
 
-    mbedtls_printf( " ok\n" );
     mbedtls_x509write_csr_set_key( &req, key );
 
     // Write CSR to buffer.
-    mbedtls_printf( "  . Writing the certificate request ..." );
+    print_wrapper( "  . Writing the certificate request ..." );
 
     if( ( ret = write_certificate_request(&req, buf, bufsize,
                                           mbedtls_ctr_drbg_random, ctr_drbg )) != 0)
     {
-        mbedtls_printf(" failed\n  !  write_certifcate_request %d\n", ret);
+        print_wrapper(" failed\n  !  write_certifcate_request %d\n", ret);
         return false;
     }
 
-    mbedtls_printf( " ok\n" );
+    print_wrapper( " ok\n" );
 
     mbedtls_x509write_csr_free(&req);
     return true;
@@ -663,25 +660,21 @@ sgx_status_t generate_pkey_csr(sgx_ra_context_t context, uint8_t *csr, uint32_t 
                                 (const unsigned char *) pers,
                                 strlen(pers))) != 0 )
     {
-        mbedtls_printf( " failed\n  !  mbedtls_ctr_drbg_seed returned %d\n", ret );
+        print_wrapper(" failed\n  !  mbedtls_ctr_drbg_seed returned %d\n", ret);
         goto err;
     }
 
-    mbedtls_printf( " ok\n" );
+    print_wrapper(" ok\n");
 
     // evp_pkey is a static variable inside this enclave.
     if (!generate_pkey(&evp_pkey, &ctr_drbg)) {
-        print_wrapper("Private key generation failed!\n");
         goto err;
     }
-    print_wrapper("Private key generated successfully!\n");
 
     uint8_t buf[4096];
     if (!generate_csr(&evp_pkey, buf, sizeof(buf), &ctr_drbg)) {
-        print_wrapper("Failed to generate CSR!\n");
         goto err;
     }
-    print_wrapper("Successfully generated certificate signing request!\n");
 
     if (*max_csr_size < strlen((const char *)buf) + 1) {
         print_wrapper("Buffer too small for CSR\n");
@@ -809,7 +802,7 @@ sgx_status_t mbedtls_connection(const char *mbedtls_crt, int mbedtls_crt_len) {
         if (ret != 0)
             break;
 
-        print_wrapper( "Handshake succeeds: [%s, %s]\n", mbedtls_ssl_get_version( &ssl ), mbedtls_ssl_get_ciphersuite( &ssl ) );
+        print_wrapper(" Handshake succeeds: [%s, %s]\n", mbedtls_ssl_get_version( &ssl ), mbedtls_ssl_get_ciphersuite( &ssl ) );
 
         if( (ret = mbedtls_ssl_get_record_expansion(&ssl)) >= 0)
             print_wrapper("Record expansion is [%d]", ret );

@@ -175,21 +175,20 @@ string VerificationManager::handleAPPHMAC(Messages::SecretMessage sec_msg) {
 
             Log("Got CSR of size: %d", csr_len);
 
-            uint8_t *evp_key, *x509_crt;
-            int evp_key_size, x509_crt_size;
+            uint8_t *x509_crt;
+            int x509_crt_size;
 
             error = this->crth->signCsr(csr, csr_len, &x509_crt, &x509_crt_size);
-            //error = this->crth->generateKeyPair(&evp_key, &evp_key_size, &x509_crt, &x509_crt_size);
 
             if (!error) {
                 Log("Got signed certificate of size: %d", x509_crt_size);
-                error = this->sp->sp_ra_app_hmac_resp(&new_msg, true, NULL, 0, x509_crt, x509_crt_size);
+                error = this->sp->sp_ra_app_hmac_resp(&new_msg, true, x509_crt, x509_crt_size);
             } else {
                 Log("Failed to sign CSR!");
             }
         } else {
             Log("HMACs do not match!", log::warning);
-            error = this->sp->sp_ra_app_hmac_resp(&new_msg, false, NULL, 0, NULL, 0);
+            error = this->sp->sp_ra_app_hmac_resp(&new_msg, false, NULL, 0);
         }
 
         if (!error)
