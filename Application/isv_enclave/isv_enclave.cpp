@@ -23,6 +23,9 @@
 #include "mbedtls/config.h"
 #include "mbedtls/platform.h"
 #include "mbedtls/x509_crt.h"
+#include "mbedtls/x509_csr.h"
+#include "mbedtls/pk.h"
+#include "mbedtls/rsa.h"
 #include <ippcp.h>
 #include "Abstract_ISV_Enclave.h"
 
@@ -37,8 +40,9 @@ const char * log_level_strings [] = {
     "DEBG" // 5
 };
 
-static uint8_t *evp_pkey, *x509_crt;
-static uint32_t evp_key_size, x509_crt_size;
+static mbedtls_pk_context evp_pkey;
+static uint8_t *x509_crt;
+static uint32_t x509_crt_size;
 
 
 // This is the public EC key of the SP. The corresponding private EC key is
@@ -398,7 +402,7 @@ sgx_status_t encrypt_secret(sgx_ra_context_t context,
                             uint8_t *p_gcm_mac) {
     sgx_status_t ret = SGX_SUCCESS;
     sgx_ec_key_128bit_t sk_key;
-    uint8_t aes_gcm_iv[12] = {0};
+    uint8_t aes_gcm_iv[12] = {0}; // TODO: This is probably very, very, very bad.
 
     do {
         ret = sgx_ra_get_keys(context, SGX_RA_KEY_SK, &sk_key);
@@ -499,12 +503,8 @@ sgx_status_t calc_hmac(sgx_ra_context_t context,
     return ret;
 }
 
-
-sgx_status_t process_x509_pkey (
+sgx_status_t process_x509_cert (
     sgx_ra_context_t context,
-    uint8_t *enc_pkey,
-    uint32_t pkey_size,
-    uint8_t *pkey_gcm_mac,
     uint8_t *enc_x509,
     uint32_t x509_size,
     uint8_t *x509_gcm_mac) {
@@ -518,24 +518,11 @@ sgx_status_t process_x509_pkey (
             break;
         }
 
-        evp_key_size = pkey_size;
-        evp_pkey = (uint8_t*) malloc(sizeof(uint8_t) * evp_key_size);
-        uint8_t aes_gcm_iv[12] = {0};
-
-        ret = sgx_rijndael128GCM_decrypt(&sk_key,
-                                         enc_pkey,
-                                         evp_key_size,
-                                         evp_pkey,
-                                         &aes_gcm_iv[0],
-                                         12,
-                                         NULL,
-                                         0,
-                                         (const sgx_aes_gcm_128bit_tag_t *) (pkey_gcm_mac));
-
         if (SGX_SUCCESS == ret) {
+            uint8_t aes_gcm_iv[12] = {0};
+
             x509_crt_size = x509_size;
             x509_crt = (uint8_t*) malloc(sizeof(uint8_t) * x509_crt_size);
-            memset(aes_gcm_iv, '\0', 12);
 
             ret = sgx_rijndael128GCM_decrypt(&sk_key,
                                              enc_x509,
@@ -586,6 +573,164 @@ void print_wrapper(const char *text, int arg1, int arg2) {
 }
 
 
+bool generate_pkey(mbedtls_pk_context *key)
+{
+    int ret = 0;
+    mbedtls_entropy_context entropy;
+    mbedtls_ctr_drbg_context ctr_drbg;
+    const char *pers = "ssl_client1gen";
+
+    mbedtls_ctr_drbg_init(&ctr_drbg);
+    mbedtls_pk_init(key);
+
+    print_wrapper( "\n  . Seeding the random number generator..." );
+
+    mbedtls_entropy_init(&entropy);
+    if ((mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, (const unsigned char*)pers, strlen(pers))) != 0) {
+        print_wrapper( " failed\n  ! mbedtls_ctr_drbg_seed returned %d\n", ret );
+        return false;
+    }
+
+    // Generate 2048-bit RSA keypair.
+    mbedtls_printf("\n  . Generating the private key ...");
+
+    if ((ret = mbedtls_pk_setup(key, mbedtls_pk_info_from_type(MBEDTLS_PK_RSA))) != 0) {
+        mbedtls_printf( " failed\n  !  mbedtls_pk_setup returned -0x%04x\n", -ret );
+        return false;
+    }
+
+    ret = mbedtls_rsa_gen_key(mbedtls_pk_rsa(*key), mbedtls_ctr_drbg_random, &ctr_drbg, 2048, 65537 ); // 2048 bit key.
+    if (ret != 0) {
+        mbedtls_printf( " failed\n  !  mbedtls_rsa_gen_key returned -0x%04x\n", -ret );
+        return false;
+    }
+
+    mbedtls_ctr_drbg_free(&ctr_drbg);
+    mbedtls_entropy_free(&entropy);
+    return true;
+}
+
+int write_certificate_request( mbedtls_x509write_csr *req, uint8_t *buf, uint32_t bufsize,
+    int (*f_rng)(void *, unsigned char *, size_t),
+    void *p_rng)
+{
+    int ret;
+
+    memset(buf, 0, bufsize);
+    if ((ret = mbedtls_x509write_csr_pem(req, buf, bufsize, f_rng, p_rng)) < 0)
+        return ret;
+
+    return 0;
+}
+
+
+bool generate_csr(mbedtls_pk_context *key, uint8_t *buf, uint32_t bufsize)
+{
+    // TODO: remove duplicated code related to seeding PRNG.
+    int ret = 0;
+    mbedtls_x509write_csr req;
+    mbedtls_entropy_context entropy;
+    mbedtls_ctr_drbg_context ctr_drbg;
+    const char *pers = "ssl_client1gencsr";
+    const char *subject = "CN=VNF Application,O=Example Company,C=SE";
+
+    mbedtls_x509write_csr_init(&req);
+    mbedtls_x509write_csr_set_md_alg(&req, MBEDTLS_MD_SHA256);
+    
+    /*if( opt.key_usage )
+        mbedtls_x509write_csr_set_key_usage( &req, opt.key_usage );
+
+    if( opt.ns_cert_type )
+        mbedtls_x509write_csr_set_ns_cert_type( &req, opt.ns_cert_type );
+    */
+
+    mbedtls_printf( "  . Seeding the random number generator..." );
+
+    mbedtls_entropy_init( &entropy );
+    if( ( ret = mbedtls_ctr_drbg_seed( &ctr_drbg, mbedtls_entropy_func, &entropy,
+                               (const unsigned char *) pers,
+                               strlen( pers ) ) ) != 0 )
+    {
+        mbedtls_printf( " failed\n  !  mbedtls_ctr_drbg_seed returned %d\n", ret );
+        return false;
+    }
+
+    mbedtls_printf( " ok\n" );
+
+    /*
+     * 1.0. Check the subject name for validity
+     */
+    mbedtls_printf( "  . Checking subject name..." );
+
+    if( ( ret = mbedtls_x509write_csr_set_subject_name( &req, subject ) ) != 0 )
+    {
+        mbedtls_printf( " failed\n  !  mbedtls_x509write_csr_set_subject_name returned %d\n", ret );
+        return false;
+    }
+
+    mbedtls_printf( " ok\n" );
+
+    mbedtls_x509write_csr_set_key( &req, key );
+
+    /*
+     * 1.2. Writing the request
+     */
+    mbedtls_printf( "  . Writing the certificate request ..." );
+
+    if( ( ret = write_certificate_request(&req, buf, bufsize,
+                                          mbedtls_ctr_drbg_random, &ctr_drbg )) != 0)
+    {
+        mbedtls_printf(" failed\n  !  write_certifcate_request %d\n", ret);
+        char buf[1024];
+        mbedtls_strerror( ret, buf, sizeof( buf ) );
+        mbedtls_printf( " - %s\n", buf );
+        return false;
+    }
+
+    mbedtls_printf( " ok\n" );
+
+
+    mbedtls_x509write_csr_free(&req);
+    mbedtls_ctr_drbg_free(&ctr_drbg);
+    mbedtls_entropy_free(&entropy);
+    return true;
+}
+
+sgx_status_t generate_pkey_csr(sgx_ra_context_t context, uint8_t *csr, uint32_t *max_csr_size, uint8_t *csr_gcm_mac) 
+{
+    // Use mbedTLS-SGX to generate key and csr.
+    // evp_pkey is a static variable inside this enclave.
+    if (!generate_pkey(&evp_pkey)) {
+        print_wrapper("Private key generation failed!\n");
+        return SGX_ERROR_UNEXPECTED;
+    }
+    print_wrapper("Private key generated successfully!\n");
+
+    uint8_t buf[4096];
+    if (!generate_csr(&evp_pkey, buf, sizeof(buf))) {
+        print_wrapper("Failed to generate CSR!\n");
+        return SGX_ERROR_UNEXPECTED;
+    }
+    print_wrapper("Successfully generated certificate signing request!\n");
+
+    if (*max_csr_size < strlen((const char *)buf) + 1) {
+        print_wrapper("Buffer too small for CSR\n");
+        return SGX_ERROR_UNEXPECTED;
+    }
+
+    // Encrypt and MAC the CSR before returning.
+    int ret = encrypt_secret(context, buf, strlen((const char *)buf), csr, csr_gcm_mac);
+    if (ret != SGX_SUCCESS) {
+        print_wrapper("Failed to encrypt CSR\n");
+        return SGX_ERROR_UNEXPECTED;
+    }
+    *max_csr_size = strlen((const char *)buf);
+    print_wrapper("Successfully encrypted CSR\n");
+    
+    return SGX_SUCCESS;
+}
+
+
 sgx_status_t mbedtls_connection(const char *mbedtls_crt, int mbedtls_crt_len) {
     int ret, len;
     mbedtls_net_context server_fd;
@@ -599,7 +744,6 @@ sgx_status_t mbedtls_connection(const char *mbedtls_crt, int mbedtls_crt_len) {
     mbedtls_ssl_config conf;
     mbedtls_x509_crt cacert;
     mbedtls_x509_crt clicert;
-    mbedtls_pk_context pkey;
 
     mbedtls_net_init(&server_fd);
     mbedtls_ssl_init(&ssl);
@@ -607,7 +751,6 @@ sgx_status_t mbedtls_connection(const char *mbedtls_crt, int mbedtls_crt_len) {
     mbedtls_x509_crt_init(&cacert);
     mbedtls_x509_crt_init(&clicert);
     mbedtls_ctr_drbg_init(&ctr_drbg);
-    mbedtls_pk_init(&pkey);
 
     print_wrapper( "\n  . Seeding the random number generator..." );
 
@@ -637,15 +780,7 @@ sgx_status_t mbedtls_connection(const char *mbedtls_crt, int mbedtls_crt_len) {
 			break;
 		}
 
-
- 		ret =  mbedtls_pk_parse_key( &pkey, (const unsigned char *) evp_pkey, evp_key_size+1, NULL, 0);
-		if (ret != 0) {
-			mbedtls_printf("mbedtls_pk_parse_key returned %d\n\n", ret);
-			break;
-		}
-
-
-        if ((ret = mbedtls_ssl_conf_own_cert(&conf, &clicert, &pkey)) != 0) {
+        if ((ret = mbedtls_ssl_conf_own_cert(&conf, &clicert, &evp_pkey)) != 0) {
             print_wrapper("mbedtls_ssl_conf_own_cert returned %d\n\n", ret);
             break;
         }
@@ -790,7 +925,6 @@ sgx_status_t mbedtls_connection(const char *mbedtls_crt, int mbedtls_crt_len) {
     mbedtls_entropy_free(&entropy);
     mbedtls_x509_crt_free(&cacert);
     mbedtls_x509_crt_free(&clicert);
-    mbedtls_pk_free(&pkey);
 
     return SGX_SUCCESS;
 }

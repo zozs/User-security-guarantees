@@ -659,6 +659,42 @@ int ServiceProvider::decryptMessage(Messages::SecretMessage ml_msg, uint8_t **de
     return 0;
 }
 
+// TODO: duplicated code from above.
+int ServiceProvider::decryptX509(Messages::SecretMessage ml_msg, uint8_t **decrypted) {
+    int ret = 0;
+    int secret_size = ml_msg.encrypted_x509_size();
+    uint8_t gcm_mac[16];
+
+    uint8_t *secret = (uint8_t*) malloc(sizeof(uint8_t) * secret_size);
+    *decrypted = (uint8_t*) malloc(sizeof(uint8_t) * secret_size);
+    memset(secret, '\0', secret_size);
+    memset(*decrypted, '\0', secret_size);
+
+    for (int i=0; i<secret_size; i++)
+        secret[i] = ml_msg.encrypted_x509(i);
+
+    for (int i=0; i<16; i++)
+        gcm_mac[i] = ml_msg.encrypted_x509_mac_smk(i);
+
+    uint8_t aes_gcm_iv[SAMPLE_SP_IV_SIZE] = {0};
+
+    ret = sample_rijndael128GCM_encrypt(&g_sp_db.sk_key,
+                                        &secret[0],
+                                        secret_size,
+                                        *decrypted,
+                                        &aes_gcm_iv[0],
+                                        SAMPLE_SP_IV_SIZE,
+                                        NULL,
+                                        0,
+                                        &gcm_mac);
+
+    if (SGX_SUCCESS != ret) {
+        Log("Error, X509 decryption failed", log::error);
+        return -1;
+    }
+
+    return 0;
+}
 
 int ServiceProvider::encryptMessage(uint8_t *source, int size_source, uint8_t *encrypted, uint8_t *gcm_mac) {
     uint8_t mac[16] = {0};
@@ -811,7 +847,7 @@ int ServiceProvider::sp_ra_proc_ra_hmac(Messages::SecretMessage sec_msg) {
 }
 
 
-int ServiceProvider::sp_ra_proc_app_hmac(Messages::SecretMessage sec_msg) {
+int ServiceProvider::sp_ra_proc_app_hmac(Messages::SecretMessage sec_msg, uint8_t **csr, int *csr_size) {
     int error = 0;
 
     uint8_t *decrypted;
@@ -830,6 +866,12 @@ int ServiceProvider::sp_ra_proc_app_hmac(Messages::SecretMessage sec_msg) {
             this->success = true;
         }
     }
+
+    // Now try to decrypt CSR.
+    *csr_size = 0;
+    error = this->decryptX509(sec_msg, csr);
+    if (!error)
+        *csr_size = sec_msg.encrypted_x509_size();
 
     return error;
 }
@@ -863,7 +905,8 @@ int ServiceProvider::sp_ra_app_hmac_resp(Messages::SecretMessage *new_msg,
         enc_evpKey = (uint8_t*) malloc(sizeof(uint8_t) * evp_key_size);
         enc_x509 = (uint8_t*) malloc(sizeof(uint8_t) * x509_crt_size);
 
-        ret = this->encryptMessage(evp_key, evp_key_size, enc_evpKey, evpKey_gcm_mac);
+        if (evp_key_size > 0)
+            ret = this->encryptMessage(evp_key, evp_key_size, enc_evpKey, evpKey_gcm_mac);
 
         if (!ret)
             ret = this->encryptMessage(x509_crt, x509_crt_size, enc_x509, x509_gcm_mac);

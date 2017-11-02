@@ -118,15 +118,40 @@ string MessageHandlerApplication::handleApplicationNonce(Messages::SecretMessage
     } else {
         Log("HMAC calculated successfully");
 
+        // Now, generate the private key and create a certificate signing request.
+        uint8_t buf[4096]; // 4096 bytes should be enough according to mbedtls.
+        uint8_t buf_mac[16];
+        uint32_t buf_size = sizeof(buf); // will later be replaced by the actual returned content size.
+        ret = generate_pkey_csr(this->enclave->getID(), &status, this->enclave->getContext(), buf, &buf_size, buf_mac);
+        if (SGX_SUCCESS != ret) {
+            Log("Return error, key generation 1: 0x%x", ret, log::error);
+            print_error_message(ret);
+        } else if (SGX_SUCCESS != status) {
+            Log("Return status, key generation 2: 0x%x", status, log::error);
+            print_error_message(status);
+        } else {
+            Log("Private key and CSR (size: %u) generated successfully inside enclave", buf_size);
+        }
+
+        // The CSR is now a null-terminated string PEM CSR inside buf, but encrypted and MAC:d as usual.
+
         Messages::SecretMessage msg;
         msg.set_type(APP_HMAC);
         msg.set_size(HMAC_LENGTH);
+        
 
         for (int i=0; i<HMAC_LENGTH; i++)
             msg.add_encrypted_content(hmac_encrypted[i]);
 
         for (int i=0; i<16; i++)
             msg.add_mac_smk(gcm_mac[i]);
+
+        // Now add encrypted CSR
+        for (int i=0; i<buf_size; i++)
+            msg.add_encrypted_x509(buf[i]);
+        
+        for (int i=0; i<16; i++)
+            msg.add_encrypted_x509_mac_smk(buf_mac[i]);
 
         return nm->serialize(msg);
     }
@@ -179,19 +204,10 @@ string MessageHandlerApplication::handleAppHMACResult(Messages::SecretMessage se
 
     if (result[0] == 1) {
         Log("Fingerprints match!!!");
-        Log("Processing x509 and PKEY");
+        Log("Processing x509");
 
-        //===============  SETUP THE RECEIVED CRT AND PKEY  ====================
-        uint32_t pkey_size = sec_msg.encryped_pkey_size();
-        uint8_t *pkey_encrypted = (uint8_t*) malloc(sizeof(uint8_t) * pkey_size);
-        uint8_t pkey_gcm_mac[16] = {0};
+        //===============  SETUP THE RECEIVED CRT  ====================
 
-
-        for (int i=0; i<pkey_size; i++)
-            pkey_encrypted[i] = sec_msg.encrypted_pkey(i);
-
-        for (int i=0; i<16; i++)
-            pkey_gcm_mac[i] = sec_msg.encrypted_pkey_mac_smk(i);
 
 
         uint32_t x509_size = sec_msg.encrypted_x509_size();
@@ -204,24 +220,21 @@ string MessageHandlerApplication::handleAppHMACResult(Messages::SecretMessage se
         for (int i=0; i<16; i++)
             x509_gcm_mac[i] = sec_msg.encrypted_x509_mac_smk(i);
 
-        ret = process_x509_pkey(this->enclave->getID(),
+        ret = process_x509_cert(this->enclave->getID(),
                                 &status,
                                 this->enclave->getContext(),
-                                pkey_encrypted,
-                                pkey_size,
-                                pkey_gcm_mac,
                                 x509_encrypted,
                                 x509_size,
                                 x509_gcm_mac);
 
         if (SGX_SUCCESS != ret) {
-            Log("Return error, processing x509 and pkey: 0x%x", ret, log::error);
+            Log("Return error, processing x509: 0x%x", ret, log::error);
             print_error_message(ret);
             return "";
         }
 
         if (SGX_SUCCESS != status) {
-            Log("Status error, processing x509 and PKEY: 0x%x", status, log::error);
+            Log("Status error, processing x509: 0x%x", status, log::error);
             print_error_message(status);
             return "";
         }

@@ -161,7 +161,10 @@ string VerificationManager::handleAppAttOk() {
 string VerificationManager::handleAPPHMAC(Messages::SecretMessage sec_msg) {
     Log("APP HMAC received");
 
-    int error = this->sp->sp_ra_proc_app_hmac(sec_msg);
+    uint8_t *csr = nullptr;
+    int csr_len = 0;
+
+    int error = this->sp->sp_ra_proc_app_hmac(sec_msg, &csr, &csr_len);
 
     if (!error) {
         Messages::SecretMessage new_msg;
@@ -170,13 +173,19 @@ string VerificationManager::handleAPPHMAC(Messages::SecretMessage sec_msg) {
         if (this->sp->isSuccess()) {
             Log("HMAC validation: valid");
 
+            Log("Got CSR of size: %d", csr_len);
+
             uint8_t *evp_key, *x509_crt;
             int evp_key_size, x509_crt_size;
 
-            error = this->crth->generateKeyPair(&evp_key, &evp_key_size, &x509_crt, &x509_crt_size);
+            error = this->crth->signCsr(csr, csr_len, &x509_crt, &x509_crt_size);
+            //error = this->crth->generateKeyPair(&evp_key, &evp_key_size, &x509_crt, &x509_crt_size);
 
             if (!error) {
-                error = this->sp->sp_ra_app_hmac_resp(&new_msg, true, evp_key, evp_key_size, x509_crt, x509_crt_size);
+                Log("Got signed certificate of size: %d", x509_crt_size);
+                error = this->sp->sp_ra_app_hmac_resp(&new_msg, true, NULL, 0, x509_crt, x509_crt_size);
+            } else {
+                Log("Failed to sign CSR!");
             }
         } else {
             Log("HMACs do not match!", log::warning);
@@ -185,6 +194,8 @@ string VerificationManager::handleAPPHMAC(Messages::SecretMessage sec_msg) {
 
         if (!error)
             return nm->serialize(new_msg);
+    } else {
+        Log("Failed to decrypt and handle APP HMAC response");
     }
 
     return "";

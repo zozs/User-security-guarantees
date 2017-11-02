@@ -40,11 +40,14 @@ enclave {
 											[user_check, isary] uint8_t *p_dst,
 											[out, count=16] uint8_t *p_gcm_mac);
 
+		public sgx_status_t generate_pkey_csr(
+			sgx_ra_context_t context,
+			[user_check, isary] uint8_t *csr,
+			[in, out, count=1] uint32_t *max_csr_size,
+			[out, count=16] uint8_t *csr_gcm_mac
+		);
 
-		public sgx_status_t process_x509_pkey(sgx_ra_context_t context,
-												[in, size=pkey_size] uint8_t *pkey,
-												uint32_t pkey_size,
-												[in, count=16] uint8_t *pkey_gcm_mac,
+		public sgx_status_t process_x509_cert(sgx_ra_context_t context,
 												[in, size=x509_size] uint8_t *x509,
 												uint32_t x509_size,
 												[in, count=16] uint8_t *x509_gcm_mac);

@@ -69,7 +69,7 @@ public:
 
     int sp_ra_proc_app_att_hmac(Messages::SecretMessage *new_msg, string hmac_key, string hmac_key_filename);
     int sp_ra_proc_ra_hmac(Messages::SecretMessage sec_msg);
-    int sp_ra_proc_app_hmac(Messages::SecretMessage sec_msg);
+    int sp_ra_proc_app_hmac(Messages::SecretMessage sec_msg, uint8_t **csr, int *csr_size);
     int sp_ra_app_hmac_resp(Messages::SecretMessage *new_msg,
                             bool match,
                             uint8_t *evp_key,
@@ -104,6 +104,7 @@ private:
     int decryptMessage(Messages::SecretMessage ml_msg, uint8_t **decrypted);
     int encryptMessage(uint8_t *source, int size_source, uint8_t *encrypted, uint8_t *gcm_mac);
 
+    int decryptX509(Messages::SecretMessage ml_msg, uint8_t **decrypted);
 };
 
 #endif
